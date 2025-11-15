@@ -3,6 +3,28 @@ import "../../cstm.style.css";
 import { MaterialReactTable } from "material-react-table";
 import { mkConfig, generateCsv, download } from "export-to-csv";
 
+// --- FIREBASE CONFIG START ---
+// import { initializeApp } from "firebase/app";
+// import { getDatabase, ref, set, remove } from "firebase/database";
+import { ref, set, remove } from "firebase/database";
+import { database } from "../../firebase"; // Adjust path if Agent.js is in 'src/pages/DealX/'
+
+
+// const firebaseConfig = {
+//   apiKey: "AIzaSyBfU5o0rgjIXHnneG1-VdGT9iE-Kmcegfg",
+//   authDomain: "dealx-5f4fb.firebaseapp.com",
+//   databaseURL: "https://dealx-5f4fb-default-rtdb.firebaseio.com",
+//   projectId: "dealx-5f4fb",
+//   storageBucket: "dealx-5f4fb.appspot.com",
+//   messagingSenderId: "47578681635",
+//   appId: "1:47578681635:web:a302c00e5ed0d74d79fc96",
+//   measurementId: "G-9XWJ8YSVGZ",
+// };
+
+// const app = initializeApp(firebaseConfig);
+// const database = getDatabase(app);
+// --- FIREBASE CONFIG END ---
+
 export default function RetailPartners() {
   const [retailers, setRetailers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -22,9 +44,11 @@ export default function RetailPartners() {
     shopName: "",
   });
 
+  const API_URL = "https://usethecred.com/api/Retailer.php";
+
   // ✅ Fetch data
   const fetchRetailers = () => {
-    fetch("https://usethecred.com/api/Retailer.php")
+    fetch(API_URL)
       .then((res) => res.json())
       .then((data) => {
         setRetailers(Array.isArray(data) ? data : []);
@@ -40,40 +64,60 @@ export default function RetailPartners() {
   // ✅ Add or Update
   const handleSubmit = () => {
     const method = editData ? "PUT" : "POST";
-    fetch("https://usethecred.com/api/Retailer.php", {
+    fetch(API_URL, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(editData ? { ...formData, id: editData.id } : formData),
     })
       .then((res) => res.json())
-      .then(() => {
-        setShowModal(false);
-        setFormData({
-          aadhar: "",
-          address: "",
-          agent: "",
-          email: "",
-          gstin: "",
-          name: "",
-          pan: "",
-          password: "",
-          phone: "",
-          rm: "",
-          shopName: "",
-        });
-        setEditData(null);
-        fetchRetailers();
+      .then((data) => {
+        if (formData.phone) {
+          set(ref(database, "Retailers/" + formData.phone), {
+            ...formData,
+            id: editData ? editData.id : (data?.id || formData.phone)
+          })
+            .then(() => {
+              setShowModal(false);
+              setFormData({
+                aadhar: "",
+                address: "",
+                agent: "",
+                email: "",
+                gstin: "",
+                name: "",
+                pan: "",
+                password: "",
+                phone: "",
+                rm: "",
+                shopName: "",
+              });
+              setEditData(null);
+              fetchRetailers();
+            })
+            .catch((error) => {
+              alert("Firebase Error: " + error.message);
+            });
+        } else {
+          alert("Enter a phone number to save in Firebase.");
+        }
       });
   };
 
-  // ✅ Delete retailer
+  // ✅ Delete retailer from Hostinger then from Firebase
   const handleDelete = (id) => {
+    const retailerToDelete = retailers.find(r => r.id === id);
+    if (!retailerToDelete) return alert("Retailer not found!");
     if (!window.confirm("Are you sure you want to delete this retailer?")) return;
-    fetch("https://usethecred.com/api/Retailer.php", {
+    fetch(API_URL, {
       method: "DELETE",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: `id=${id}`,
-    }).then(() => fetchRetailers());
+    })
+      .then(() => {
+        if (retailerToDelete.phone)
+          remove(ref(database, `Retailers/${retailerToDelete.phone}`));
+        fetchRetailers();
+      });
   };
 
   // ✅ Table Columns (matching your database)
@@ -163,7 +207,6 @@ export default function RetailPartners() {
           ➕ Add Retailer
         </button>
       </div>
-
       <div className="table-cntnr" style={{ width: "100%", overflowX: "auto" }}>
         <MaterialReactTable
           columns={columns}
@@ -239,119 +282,34 @@ export default function RetailPartners() {
             <h3 style={{ marginTop: 0, marginBottom: 20 }}>
               {editData ? "Edit Retailer" : "Add Retailer"}
             </h3>
-
-            {/* Aadhar */}
-            <div style={formGroupStyle}>
-              <label style={labelStyle}>Aadhar</label>
-              <input
-                value={formData.aadhar}
-                onChange={(e) => setFormData({ ...formData, aadhar: e.target.value })}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* Address */}
-            <div style={formGroupStyle}>
-              <label style={labelStyle}>Address</label>
-              <input
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* Agent */}
-            <div style={formGroupStyle}>
-              <label style={labelStyle}>Agent</label>
-              <input
-                value={formData.agent}
-                onChange={(e) => setFormData({ ...formData, agent: e.target.value })}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* Email */}
-            <div style={formGroupStyle}>
-              <label style={labelStyle}>Email</label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* GSTIN */}
-            <div style={formGroupStyle}>
-              <label style={labelStyle}>GSTIN</label>
-              <input
-                value={formData.gstin}
-                onChange={(e) => setFormData({ ...formData, gstin: e.target.value })}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* Name */}
-            <div style={formGroupStyle}>
-              <label style={labelStyle}>Name</label>
-              <input
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* PAN */}
-            <div style={formGroupStyle}>
-              <label style={labelStyle}>PAN</label>
-              <input
-                value={formData.pan}
-                onChange={(e) => setFormData({ ...formData, pan: e.target.value })}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* Password */}
-            <div style={formGroupStyle}>
-              <label style={labelStyle}>Password</label>
-              <input
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* Phone */}
-            <div style={formGroupStyle}>
-              <label style={labelStyle}>Phone</label>
-              <input
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* RM */}
-            <div style={formGroupStyle}>
-              <label style={labelStyle}>RM (Relationship Manager)</label>
-              <input
-                value={formData.rm}
-                onChange={(e) => setFormData({ ...formData, rm: e.target.value })}
-                style={inputStyle}
-              />
-            </div>
-
-            {/* Shop Name */}
-            <div style={formGroupStyle}>
-              <label style={labelStyle}>Shop Name</label>
-              <input
-                value={formData.shopName}
-                onChange={(e) => setFormData({ ...formData, shopName: e.target.value })}
-                style={inputStyle}
-              />
-            </div>
-
+            {/* Form Fields */}
+            {[
+              { label: "Aadhar", name: "aadhar" },
+              { label: "Address", name: "address" },
+              { label: "Agent", name: "agent" },
+              { label: "Email", name: "email", type: "email" },
+              { label: "GSTIN", name: "gstin" },
+              { label: "Name", name: "name" },
+              { label: "PAN", name: "pan" },
+              { label: "Password", name: "password", type: "password" },
+              { label: "Phone", name: "phone" },
+              { label: "RM", name: "rm" },
+              { label: "Shop Name", name: "shopName" },
+            ].map(field => (
+              <div style={formGroupStyle} key={field.name}>
+                <label style={labelStyle}>{field.label}</label>
+                <input
+                  type={field.type || "text"}
+                  value={formData[field.name]}
+                  onChange={(e) =>
+                    setFormData({ ...formData, [field.name]: e.target.value })
+                  }
+                  required={field.name === "phone" || field.name === "name"}
+                  disabled={field.name === "phone" && !!editData}
+                  style={inputStyle}
+                />
+              </div>
+            ))}
             <button
               style={{
                 background: "#4CAF50",

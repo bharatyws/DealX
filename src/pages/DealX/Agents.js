@@ -2,25 +2,28 @@ import React, { useState, useEffect, useMemo } from "react";
 import "../../cstm.style.css";
 import { MaterialReactTable } from "material-react-table";
 import { FaEdit, FaTrash } from "react-icons/fa";
+import { ref, set, remove } from "firebase/database";
+import { database } from "../../firebase"; // Adjust path if Agent.js is in 'src/pages/DealX/'
 
-import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, remove } from "firebase/database";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBfU5o0rgjIXHnneG1-VdGT9iE-Kmcegfg",
-  authDomain: "dealx-5f4fb.firebaseapp.com",
-  databaseURL: "https://dealx-5f4fb-default-rtdb.firebaseio.com",
-  projectId: "dealx-5f4fb",
-  storageBucket: "dealx-5f4fb.firebasestorage.app",
-  messagingSenderId: "47578681635",
-  appId: "1:47578681635:web:a302c00e5ed0d74d79fc96",
-  measurementId: "G-9XWJ8YSVGZ",
-};
+// import { initializeApp } from "firebase/app";
+// import { getDatabase, ref, set, remove } from "firebase/database";
+
+// const firebaseConfig = {
+//   apiKey: "AIzaSyBfU5o0rgjIXHnneG1-VdGT9iE-Kmcegfg",
+//   authDomain: "dealx-5f4fb.firebaseapp.com",
+//   databaseURL: "https://dealx-5f4fb-default-rtdb.firebaseio.com",
+//   projectId: "dealx-5f4fb",
+//   storageBucket: "dealx-5f4fb.firebasestorage.app",
+//   messagingSenderId: "47578681635",
+//   appId: "1:47578681635:web:a302c00e5ed0d74d79fc96",
+//   measurementId: "G-9XWJ8YSVGZ",
+// };
 
 const API_URL = "https://usethecred.com/api/Agent.php";
 
-const app = initializeApp(firebaseConfig);
-const database = getDatabase(app);
+// const app = initializeApp(firebaseConfig);
+// const database = getDatabase(app);
 
 export default function Agent() {
   const [agents, setAgents] = useState([]);
@@ -54,14 +57,20 @@ export default function Agent() {
 
   // Delete from Hostinger then from Firebase (using phone as Firebase key)
   const handleDelete = (id) => {
+    // Find the current agent to get their phone
     const agentToDelete = agents.find(a => a.id === id);
     if (!agentToDelete) return alert("Agent not found!");
+
     if (!window.confirm("Are you sure you want to delete this agent?")) return;
 
+    // 1. Delete from Hostinger/API
     fetch(`${API_URL}?id=${id}`, { method: "DELETE" })
       .then(() => {
+        // 2. Delete from Firebase (using phone as key)
         if (agentToDelete.phone)
           remove(ref(database, `Agents/${agentToDelete.phone}`));
+
+        // Update UI
         setAgents((prev) => prev.filter((a) => a.id !== id));
       });
   };
@@ -83,6 +92,7 @@ export default function Agent() {
     })
       .then((res) => res.json())
       .then((data) => {
+        // Save/update into Firebase using phone as the key
         if (formData.phone) {
           set(ref(database, "Agents/" + formData.phone), {
             ...formData,
@@ -90,6 +100,7 @@ export default function Agent() {
             total_commission: editAgent ? editAgent.total_commission : 0,
           })
             .then(() => {
+              // Update UI for Hostinger side only
               if (editAgent) {
                 setAgents((prev) =>
                   prev.map((a) =>
@@ -246,7 +257,6 @@ export default function Agent() {
                     setFormData({ ...formData, phone: e.target.value })
                   }
                   required
-                  disabled={!!editAgent}
                 />
               </div>
               <div className="form-group">

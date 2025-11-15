@@ -1,50 +1,175 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import "../../cstm.style.css";
 import { MaterialReactTable } from "material-react-table";
+import { FaEdit, FaTrash } from "react-icons/fa";
+import { ref, set, remove } from "firebase/database";
+import { database } from "../../firebase"; // Adjust if path differs
+
+const API_URL = "https://usethecred.com/api/loanBook.php";
 
 export default function LoanBook() {
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedLoan, setSelectedLoan] = useState(null);
+  const [showPopup, setShowPopup] = useState(false);
+  const [editLoan, setEditLoan] = useState(null);
+  const [formData, setFormData] = useState({
+    customerName: "",
+    phone: "",
+    pan: "",
+    dateonly: "",
+    currentTime: "",
+    itemName: "",
+    itemserial: "",
+    itemValue: "",
+    downpayment: "",
+    selectedLoanAmount: "",
+    selectedTenure: "",
+    shopName: "",
+    status: "OPEN",
+    creator: "",
+    creatorid: "",
+    keysValue: "",
+    photoWithDevice_url: "",
+  });
 
+  // Fetch all loans
   useEffect(() => {
-    fetch("https://usethecred.com/api/loanBook.php")
-      .then((res) => res.json())
-      .then((data) => {
-        setLoans(Array.isArray(data) ? data : []);
-        setLoading(false);
+    fetch(API_URL)
+      .then((res) => {
+        if (!res.ok) throw new Error("Network response was not ok");
+        return res.json();
       })
+      .then((data) => setLoans(Array.isArray(data) ? data : []))
       .catch((err) => {
-        console.error("Error fetching loans:", err);
+        setLoans([]);
         setLoading(false);
-      });
+        alert("Could not load loans from server: " + err.message);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  // Columns for table
+  // Delete from Hostinger & Firebase
+  const handleDelete = (id) => {
+    const loanToDelete = loans.find(l => l.id === id);
+    if (!loanToDelete) return alert("Loan not found!");
+    if (!window.confirm("Are you sure you want to delete this loan?")) return;
+
+    fetch(`${API_URL}?id=${id}`, { method: "DELETE" })
+      .then(() => {
+        remove(ref(database, `Loans/${id}`));
+        setLoans((prev) => prev.filter((l) => l.id !== id));
+      });
+  };
+
+  const handleEdit = (loan) => {
+    setEditLoan(loan);
+    setFormData(loan);
+    setShowPopup(true);
+  };
+
+  // Add or update both Hostinger PHP & Firebase
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const method = editLoan ? "PUT" : "POST";
+    fetch(API_URL, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editLoan ? { ...formData, id: editLoan.id } : formData),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        // Use Hostinger ID for Firebase, or fallback to submitted phone
+        const firebaseId = editLoan ? editLoan.id : data.id || formData.phone;
+        set(ref(database, "Loans/" + firebaseId, {
+          ...formData,
+        }))
+          .then(() => {
+            if (editLoan) {
+              setLoans((prev) =>
+                prev.map((l) =>
+                  l.id === editLoan.id
+                    ? { ...l, ...formData }
+                    : l
+                )
+              );
+            } else {
+              setLoans((prev) => [
+                {
+                  id: data.id,
+                  ...formData,
+                },
+                ...prev,
+              ]);
+            }
+            setShowPopup(false);
+            setFormData({
+              customerName: "",
+              phone: "",
+              pan: "",
+              dateonly: "",
+              currentTime: "",
+              itemName: "",
+              itemserial: "",
+              itemValue: "",
+              downpayment: "",
+              selectedLoanAmount: "",
+              selectedTenure: "",
+              shopName: "",
+              status: "OPEN",
+              creator: "",
+              creatorid: "",
+              keysValue: "",
+              photoWithDevice_url: "",
+            });
+            setEditLoan(null);
+          })
+          .catch((error) => {
+            alert("Firebase Error: " + error.message);
+          });
+      });
+  };
+
   const columns = useMemo(
     () => [
       {
         accessorKey: "actions",
-        header: "Actions",
+        header: "Action",
         Cell: ({ row }) => (
-          <button
-            onClick={() => setSelectedLoan(row.original)}
-            style={{
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              fontSize: "18px",
-            }}
-          >
-            👁️
-          </button>
+          <div style={{ display: "flex", gap: "12px" }}>
+            <button
+              style={{
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                fontSize: "18px",
+                color: "#7c3aed",
+              }}
+              title="Edit"
+              onClick={() => handleEdit(row.original)}
+            >
+              <FaEdit />
+            </button>
+            <button
+              style={{
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                fontSize: "18px",
+                color: "#ef4444",
+              }}
+              title="Delete"
+              onClick={() => handleDelete(row.original.id)}
+            >
+              <FaTrash />
+            </button>
+          </div>
         ),
       },
       { accessorKey: "id", header: "ID" },
-      { accessorKey: "customerName", header: "Customer" },
+      { accessorKey: "customerName", header: "Customer Name" },
       { accessorKey: "phone", header: "Phone" },
       { accessorKey: "pan", header: "PAN" },
-      { accessorKey: "dateonly", header: "Date Only" },
+      { accessorKey: "dateonly", header: "Loan Date" },
       { accessorKey: "currentTime", header: "Current Time" },
       { accessorKey: "itemName", header: "Item Name" },
       { accessorKey: "itemserial", header: "Item Serial" },
@@ -63,164 +188,193 @@ export default function LoanBook() {
           }}>
             {cell.getValue()}
           </span>
-        )
+        ),
       },
       { accessorKey: "creator", header: "Creator" },
       { accessorKey: "creatorid", header: "Creator ID" },
       { accessorKey: "keysValue", header: "Keys Value" },
-      { accessorKey: "created_at", header: "Created At" },
-      {
-        accessorKey: "photoWithDevice_url",
-        header: "Photo With Device",
-        Cell: ({ cell }) =>
-          cell.getValue() ? (
-            <a
-              href={cell.getValue()}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                color: "blue", fontWeight: "bold"
-              }}
-            >
-              View
-            </a>
-          ) : (
-            "-"
-          ),
-      },
+      { accessorKey: "photoWithDevice_url", header: "Photo With Device URL" },
     ],
     []
   );
 
   if (loading) return <p>Loading loans...</p>;
 
-  // Loan Detail formulas (Excel logic)
-  if (selectedLoan) {
-    const netDisbursal = selectedLoan.downpayment;
-    const loanAmount = (netDisbursal * 100) / 98 + 250;
-    const pf = loanAmount - netDisbursal;
-    const roiAnnual = 0.18;
-    const roiDaily = roiAnnual / 365;
-    const numEmis = selectedLoan.selectedTenure;
-    // EMI Calculation (Excel logic)
-    const interestForFirst95 = loanAmount * roiDaily * 95;
-    const emiAmount = Math.round((loanAmount + interestForFirst95) / numEmis);
-    const repaymentAmount = emiAmount * numEmis;
-    const totalInterest = repaymentAmount - loanAmount;
-
-    function getEmiSchedule() {
-      let emiList = [];
-      let principalLeft = loanAmount;
-      let emiDate = selectedLoan.loanDate ? new Date(selectedLoan.loanDate) : new Date();
-      for (let i = 1; i <= numEmis; i++) {
-        const monthlyInterest = Math.round(loanAmount * roiAnnual / 12);
-        const principal = emiAmount - monthlyInterest;
-        emiList.push({
-          no: i,
-          date: emiDate.toDateString(),
-          emi: emiAmount,
-          interest: monthlyInterest,
-          principal: principal,
-          balance: Math.max(principalLeft - principal, 0)
-        });
-        principalLeft -= principal;
-        emiDate.setMonth(emiDate.getMonth() + 1);
-      }
-      return emiList;
-    }
-
-    const emiSchedule = getEmiSchedule();
-
-    return (
-      <div className="loan-detail-page" style={{ padding: 32, background: "#fff" }}>
-        <button onClick={() => setSelectedLoan(null)} style={{
-          marginBottom: 16,
-          background: "#eee",
-          padding: "8px 16px",
-          border: "none",
-          borderRadius: "6px",
-          cursor: "pointer"
-        }}>← Back to Loan Book</button>
-
-        <h2>Loan Details</h2>
-        <table>
-          <tbody>
-            <tr><td><b>Customer Name:</b></td><td>{selectedLoan.customerName}</td></tr>
-            <tr><td>Loan Amount:</td><td>₹{loanAmount.toFixed(2)}</td></tr>
-            <tr><td>PF (Processing Fee):</td><td>₹{pf.toFixed(2)}</td></tr>
-            <tr><td>Annual ROI:</td><td>{(roiAnnual * 100).toFixed(2)}%</td></tr>
-            <tr><td>Down Payment:</td><td>₹{netDisbursal}</td></tr>
-            <tr><td>Tenure:</td><td>{numEmis} months</td></tr>
-            <tr><td>EMI Amount:</td><td>₹{emiAmount}</td></tr>
-            <tr><td>Total Repayment:</td><td>₹{repaymentAmount}</td></tr>
-            <tr><td>Total Interest:</td><td>₹{totalInterest.toFixed(2)}</td></tr>
-            <tr><td>Status:</td>
-              <td>
-                <span style={{
-                  color: selectedLoan.status === "CLOSE" ? "red" : "green",
-                  fontWeight: "bold"
-                }}>
-                  {selectedLoan.status}
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-
-        <h3 style={{marginTop: 24}}>EMI Schedule</h3>
-        <table border="1" cellPadding="5">
-          <thead>
-            <tr>
-              <th>No</th>
-              <th>EMI Date</th>
-              <th>EMI (₹)</th>
-              <th>Interest (₹)</th>
-              <th>Principal (₹)</th>
-              <th>Balance (₹)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {emiSchedule.map(e => (
-              <tr key={e.no}>
-                <td>{e.no}</td>
-                <td>{e.date}</td>
-                <td>{e.emi}</td>
-                <td>{e.interest}</td>
-                <td>{e.principal}</td>
-                <td>{e.balance.toFixed(2)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-
-  // Main Table view
   return (
     <div className="page-bg">
       <div className="title-header">
-        <h2 className="page-title">Loan Book</h2>
-      </div>
-      <div className="table-cntnr" style={{ width: "100%", overflowX: "auto" }}>
-        <MaterialReactTable
-          columns={columns}
-          data={loans}
-          enableSorting
-          enableColumnFilters
-          enablePagination
-          enableColumnOrdering
-          enableDensityToggle={false}
-          enableRowSelection={false}
-          enableGlobalFilter
-          muiTableContainerProps={{
-            sx: { minWidth: "1200px" },
+        <div className="title-icon">
+          <h2 className="page-title">Loan Book</h2>
+        </div>
+        <button
+          className="add-btn"
+          onClick={() => {
+            setEditLoan(null);
+            setFormData({
+              customerName: "",
+              phone: "",
+              pan: "",
+              dateonly: "",
+              currentTime: "",
+              itemName: "",
+              itemserial: "",
+              itemValue: "",
+              downpayment: "",
+              selectedLoanAmount: "",
+              selectedTenure: "",
+              shopName: "",
+              status: "OPEN",
+              creator: "",
+              creatorid: "",
+              keysValue: "",
+              photoWithDevice_url: "",
+            });
+            setShowPopup(true);
           }}
-          muiTableBodyCellProps={{
-            sx: { whiteSpace: "nowrap" },
-          }}
-        />
+        >
+          + Add Loan
+        </button>
       </div>
+
+      <div className="table-cntnr" style={{ overflowX: "auto" }}>
+        <MaterialReactTable columns={columns} data={loans} />
+      </div>
+
+      {showPopup && (
+        <div
+          className="modal-bg"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "flex-start",
+            zIndex: 9999,
+            overflowY: "auto",
+          }}
+        >
+          <div
+            className="modal-box"
+            style={{
+              marginTop: 48,
+              background: "#fff",
+              padding: "32px 24px",
+              borderRadius: "12px",
+              maxWidth: "520px",
+              width: "95vw",
+              maxHeight: "82vh",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+              overflowY: "auto",
+              position: "relative",
+              display: "flex",
+              flexDirection: "column"
+            }}
+          >
+            <button
+              style={{
+                position: "absolute",
+                top: 12,
+                right: 14,
+                background: "red",
+                color: "white",
+                border: "none",
+                padding: "5px 10px",
+                borderRadius: "5px",
+                cursor: "pointer",
+                zIndex: 2,
+              }}
+              onClick={() => setShowPopup(false)}
+            >
+              ✖
+            </button>
+            <h3 style={{ margin: "0 0 18px 0", textAlign: "center" }}>
+              {editLoan ? "Edit Loan" : "Add Loan"}
+            </h3>
+            <form onSubmit={handleSubmit} style={{flex: 1, display: "flex", flexDirection: "column"}}>
+              {[
+                { label: "Customer Name", name: "customerName" },
+                { label: "Phone", name: "phone" },
+                { label: "PAN", name: "pan" },
+                { label: "Loan Date", name: "dateonly", type: "date" },
+                { label: "Current Time", name: "currentTime" },
+                { label: "Item Name", name: "itemName" },
+                { label: "Item Serial", name: "itemserial" },
+                { label: "Item Value", name: "itemValue" },
+                { label: "Down Payment", name: "downpayment" },
+                { label: "Loan Amount", name: "selectedLoanAmount" },
+                { label: "Tenure", name: "selectedTenure" },
+                { label: "Shop Name", name: "shopName" },
+                { label: "Status", name: "status", type: "select", options: ["OPEN", "CLOSE"] },
+                { label: "Creator", name: "creator" },
+                { label: "Creator ID", name: "creatorid" },
+                { label: "Keys Value", name: "keysValue" },
+                { label: "Photo With Device URL", name: "photoWithDevice_url" },
+              ].map(field =>
+                field.type === "select" ? (
+                  <div className="form-group" key={field.name} style={{marginBottom: 12}}>
+                    <label>{field.label}</label>
+                    <select
+                      value={formData[field.name] || ""}
+                      onChange={e =>
+                        setFormData({ ...formData, [field.name]: e.target.value })
+                      }
+                    >
+                      {field.options.map(opt =>
+                        <option value={opt} key={opt}>{opt}</option>
+                      )}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="form-group" key={field.name} style={{marginBottom: 12}}>
+                    <label>{field.label}</label>
+                    <input
+                      type={field.type || "text"}
+                      value={formData[field.name] || ""}
+                      onChange={e =>
+                        setFormData({ ...formData, [field.name]: e.target.value })
+                      }
+                      required={field.name === "customerName" || field.name === "phone"}
+                      disabled={field.name === "phone" && !!editLoan}
+                      style={{padding: "8px", width: "100%", borderRadius: "5px", border: "1px solid #ddd"}}
+                    />
+                  </div>
+                )
+              )}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 16 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowPopup(false)}
+                  style={{
+                    background: "#ccc",
+                    border: "none",
+                    borderRadius: "5px",
+                    padding: "8px 16px",
+                    color: "#222",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    background: "#7c3aed",
+                    border: "none",
+                    color: "#fff",
+                    borderRadius: "5px",
+                    padding: "8px 16px",
+                  }}
+                >
+                  {editLoan ? "Update" : "Add"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
