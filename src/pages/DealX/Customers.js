@@ -252,6 +252,10 @@ export default function Customers() {
                 <label style={profileStyles.label}>Created At</label>
                 <p style={profileStyles.value}>{selectedCustomer.created_at || "N/A"}</p>
               </div>
+              <div style={profileStyles.gridItem}>
+                <label style={profileStyles.label}>UTC Score</label>
+                <p style={profileStyles.value}>{selectedCustomer.created_at || "N/A"}</p>
+              </div>
             </div>
 
             {/* Loan Details Section with Count */}
