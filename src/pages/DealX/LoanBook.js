@@ -267,9 +267,9 @@ export default function LoanBook() {
               <th>EMI (₹)</th>
               <th>Interest (₹)</th>
               <th>Principal (₹)</th>
-              <th>Collection (₹)</th>
-              <th>Collection Date</th>
               <th>Balance (₹)</th>
+              <th>Collection Date</th>
+              <th>Collection (₹)</th>
               <th>Loan Status</th>
             </tr>
           </thead>
